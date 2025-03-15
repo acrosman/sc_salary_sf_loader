@@ -4,14 +4,39 @@ import getpass
 import logging
 from datetime import datetime
 import sys
-from typing import List, Dict, Any
+from typing import Any
 import json
+from collections.abc import Iterator
 
 class SalesforceLoader:
+    """A class to manage the transfer of salary data from SQLite to Salesforce.
+
+    This class handles the extraction of person and salary data from a SQLite database
+    and loads it into Salesforce using Person Accounts and a custom Salary History object.
+    It uses batch processing to handle large datasets efficiently and provides logging
+    of all operations.
+
+    Attributes:
+        sf (Salesforce): Connection to Salesforce instance, initialized during connect()
+        db_conn (sqlite3.Connection): Connection to SQLite database, initialized during connect()
+        batch_size (int): Number of records to process in each batch, defaults to 200
+        logger (logging.Logger): Logger instance for tracking operations
+
+    Example:
+        loader = SalesforceLoader()
+        loader.connect("path/to/database.db")
+        try:
+            loader.load_persons()
+            loader.load_salaries()
+        finally:
+            loader.close()
+    """
+
     def __init__(self, batch_size: int = 200):
         self.sf = None
         self.db_conn = None
         self.batch_size = batch_size
+        self.person_account_record_type_id = None
         self.setup_logging()
 
     def setup_logging(self):
@@ -50,8 +75,24 @@ class SalesforceLoader:
             # Salesforce connection
             username, password, token, domain = self.get_credentials()
             self.sf = Salesforce(username=username, password=password,
-                               security_token=token, domain=domain)
+                                security_token=token, domain=domain)
             self.logger.info("Connected to Salesforce successfully")
+
+            # Get Person Account Record Type ID
+            query = """
+                SELECT Id
+                FROM RecordType
+                WHERE SObjectType = 'Account'
+                AND IsPersonType = true
+                AND IsActive = true
+                LIMIT 1
+            """
+            result = self.sf.query(query)
+            if result['totalSize'] == 0:
+                raise Exception("No active Person Account Record Type found")
+
+            self.person_account_record_type_id = result['records'][0]['Id']
+            self.logger.info(f"Found Person Account Record Type: {self.person_account_record_type_id}")
 
             # SQLite connection
             self.db_conn = sqlite3.connect(db_path)
@@ -61,7 +102,7 @@ class SalesforceLoader:
             self.logger.error(f"Connection error: {str(e)}")
             sys.exit(1)
 
-    def chunk_data(self, data: List[Dict[str, Any]], size: int):
+    def chunk_data(self, data: list[dict[str, Any]], size: int) -> Iterator[list[dict[str, Any]]]:
         """Split data into chunks for batch processing"""
         for i in range(0, len(data), size):
             yield data[i:i + size]
@@ -77,7 +118,7 @@ class SalesforceLoader:
         records = []
         for row in cursor.fetchall():
             records.append({
-                'RecordTypeId': '012000000000000AAA',  # Replace with actual Person Account RecordTypeId
+                'RecordTypeId': self.person_account_record_type_id,
                 'FirstName': row[1],
                 'LastName': row[2],
                 'External_Id__pc': str(row[0])
