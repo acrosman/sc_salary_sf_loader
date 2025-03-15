@@ -22,6 +22,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Salesforce DX
+.sf/
+.sfdx/
+.sf/orgs/
+.sf-config.json
+
 # Virtual Environment
 .env
 .venv
