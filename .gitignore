@@ -21,6 +21,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Virtual Environment
 .env
 .venv
 env/
@@ -30,19 +32,44 @@ env.bak/
 venv.bak/
 .python-version
 
-# SQLite3
+# SQLite3 Database Files
 *.db
 *.db-journal
 *.sqlite
 *.sqlite3
 *.sqlite-journal
 
-# Project specific
+# Project Specific
 sf_loader_*.log
 *.log
 
-# IDE
+# IDE and Editor Files
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+
+# Operating System
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Test Coverage
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
