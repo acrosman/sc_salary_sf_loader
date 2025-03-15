@@ -7,4 +7,5 @@
     <relationshipLabel>Salary History</relationshipLabel>
     <relationshipName>Salary_History</relationshipName>
     <required>true</required>
+    <deleteConstraint>Restrict</deleteConstraint>
 </CustomField>
