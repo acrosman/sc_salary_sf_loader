@@ -1,6 +1,6 @@
 {
-  "orgName": "acrosman company",
-  "edition": "Enterprise",
+  "orgName": "SC Salary History Data",
+  "edition": "Developer",
   "features": [
     "EnableSetPasswordInApi",
     "PersonAccounts"
