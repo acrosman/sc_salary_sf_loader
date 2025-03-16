@@ -52,6 +52,9 @@ sf org create scratch -f config/project-scratch-def.json -a sc_salary_loader
 # Push the metadata
 sf project deploy start
 
+# Assign permission set to the default user
+sf org assign permset --name Migrate_Data
+
 # Open the org
 sf org open
 ```
