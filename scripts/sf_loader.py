@@ -103,6 +103,7 @@ class SalesforceLoader:
             # SQLite connection
             self.validate_db_path(db_path)
             self.db_conn = sqlite3.connect(db_path)
+            self.setup_database_schema()
             self.logger.info(f"Connected to SQLite database: {db_path}")
 
         except Exception as e:
@@ -136,13 +137,55 @@ class SalesforceLoader:
         for i in range(0, len(data), size):
             yield data[i:i + size]
 
-    def load_persons(self):
-        """Load Person records to Salesforce Person Accounts"""
+    def setup_database_schema(self):
+        """Add or reset SFID columns in the database"""
+        try:
+            cursor = self.db_conn.cursor()
+
+            # Add SFID column to Person table if it doesn't exist
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM pragma_table_info('Person')
+                WHERE name='SFID'
+            """)
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("ALTER TABLE Person ADD COLUMN SFID TEXT")
+            else:
+                cursor.execute("UPDATE Person SET SFID = NULL")
+
+            # Add SFID column to Salary table if it doesn't exist
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM pragma_table_info('Salary')
+                WHERE name='SFID'
+            """)
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("ALTER TABLE Salary ADD COLUMN SFID TEXT")
+            else:
+                cursor.execute("UPDATE Salary SET SFID = NULL")
+
+            self.db_conn.commit()
+            self.logger.info("Database schema updated successfully")
+
+        except sqlite3.Error as e:
+            self.logger.error(f"Database schema update failed: {str(e)}")
+            raise
+
+    def load_persons(self, limit: int = None):
+        """Load Person records to Salesforce Person Accounts
+
+        Args:
+            limit (int, optional): Maximum number of records to process. Defaults to None (all records).
+        """
         cursor = self.db_conn.cursor()
-        cursor.execute("""
+        query = """
             SELECT ID, FirstName, LastName
             FROM Person
-        """)
+            WHERE SFID IS NULL
+        """
+        if limit:
+            query += f" LIMIT {limit}"
+        cursor.execute(query)
 
         records = []
         for row in cursor.fetchall():
@@ -165,12 +208,20 @@ class SalesforceLoader:
             try:
                 results = self.sf.bulk.Account.insert(batch)
 
-                for result in results:
+                # Update SQLite with Salesforce IDs
+                update_cursor = self.db_conn.cursor()
+                for record, result in zip(batch, results):
                     if result['success']:
                         success_count += 1
+                        update_cursor.execute(
+                            "UPDATE Person SET SFID = ? WHERE ID = ?",
+                            (result['id'], record['External_Id__pc'])
+                        )
                     else:
                         error_count += 1
                         self.logger.error(f"Error inserting person: {result}")
+
+                self.db_conn.commit()
 
             except Exception as e:
                 self.logger.error(f"Batch error: {str(e)}")
@@ -182,16 +233,19 @@ class SalesforceLoader:
         """Load Salary records to Salesforce"""
         cursor = self.db_conn.cursor()
         cursor.execute("""
-            SELECT ID, PersonID, Title, Employer, Salary, Bonus,
-                   TotalPay, EntryDate, SourceFile, LineNumber
-            FROM Salary
+            SELECT s.ID, p.SFID as PersonSFID, s.Title, s.Employer, s.Salary, s.Bonus,
+                   s.TotalPay, s.EntryDate, s.SourceFile, s.LineNumber
+            FROM Salary s
+            INNER JOIN Person p ON s.PersonID = p.ID
+            WHERE s.SFID IS NULL
+            AND p.SFID IS NOT NULL
         """)
 
         records = []
         for row in cursor.fetchall():
             records.append({
                 'External_Id__c': str(row[0]),
-                'Person__c': str(row[1]),
+                'Person__c': row[1],  # Now using Person's SFID directly
                 'Title__c': row[2],
                 'Employer__c': row[3],
                 'Salary__c': row[4],
@@ -205,18 +259,29 @@ class SalesforceLoader:
         success_count = 0
         error_count = 0
 
-        for batch in self.chunk_data(records, self.batch_size):
-            try:
-                results = self.sf.bulk.Salary_History__c.upsert(
-                    batch, 'External_Id__c', batch_size=self.batch_size
-                )
+        total_records = len(records)
+        for i, batch in enumerate(self.chunk_data(records, self.batch_size)):
+            processed = min((i + 1) * self.batch_size, total_records)
+            percentage = (processed / total_records) * 100
+            print(f"Processing salary batch {i+1}: {processed}/{total_records} records ({percentage:.1f}%)")
 
-                for result in results:
+            try:
+                results = self.sf.bulk.Salary_History__c.insert(batch)
+
+                # Update SQLite with Salesforce IDs
+                update_cursor = self.db_conn.cursor()
+                for record, result in zip(batch, results):
                     if result['success']:
                         success_count += 1
+                        update_cursor.execute(
+                            "UPDATE Salary SET SFID = ? WHERE ID = ?",
+                            (result['id'], record['External_Id__c'])
+                        )
                     else:
                         error_count += 1
-                        self.logger.error(f"Error upserting salary: {result}")
+                        self.logger.error(f"Error inserting salary: {result}")
+
+                self.db_conn.commit()
 
             except Exception as e:
                 self.logger.error(f"Batch error: {str(e)}")
@@ -232,10 +297,14 @@ class SalesforceLoader:
 def main():
     loader = SalesforceLoader()
     db_path = input("Enter the path to your SQLite database: ")
+
+    limit_input = input("Enter maximum number of person records to load (press Enter for all): ").strip()
+    record_limit = int(limit_input) if limit_input else None
+
     loader.connect(db_path)
 
     try:
-        loader.load_persons()
+        loader.load_persons(record_limit)
         print("\nAll person records have been loaded. Beginning salary records...")
         loader.load_salaries()
     except Exception as e:
