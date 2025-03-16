@@ -75,8 +75,8 @@ python scripts/sf_loader.py
 ├── config/                     # Salesforce project configuration
 ├── force-app/                  # Salesforce metadata
 │   └── main/default/
-│       ├── objects/           # Custom object definitions
-│       └── fields/            # Custom field definitions
+│       └── objects/           # Custom object definitions
+│           └── fields/        # Custom field definitions
 ├── scripts/                   # Python scripts
 │   └── sf_loader.py          # Main data loading script
 ├── requirements.txt           # Python dependencies
