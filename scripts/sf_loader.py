@@ -7,6 +7,7 @@ import sys
 from typing import Any
 import json
 from collections.abc import Iterator
+import os
 
 class SalesforceLoader:
     """A class to manage the transfer of salary data from SQLite to Salesforce.
@@ -32,7 +33,13 @@ class SalesforceLoader:
             loader.close()
     """
 
-    def __init__(self, batch_size: int = 200):
+    sf: Salesforce | None
+    db_conn: sqlite3.Connection | None
+    batch_size: int
+    person_account_record_type_id: str | None
+    logger: logging.Logger
+
+    def __init__(self, batch_size: int = 10000):
         self.sf = None
         self.db_conn = None
         self.batch_size = batch_size
@@ -60,7 +67,7 @@ class SalesforceLoader:
         self.logger.addHandler(fh)
         self.logger.addHandler(ch)
 
-    def get_credentials(self) -> tuple:
+    def get_credentials(self) -> tuple[str, str, str, str]:
         """Interactive credential collection"""
         print("\nEnter Salesforce Credentials:")
         username = input("Username: ")
@@ -95,12 +102,35 @@ class SalesforceLoader:
             self.logger.info(f"Found Person Account Record Type: {self.person_account_record_type_id}")
 
             # SQLite connection
+            self.validate_db_path(db_path)
             self.db_conn = sqlite3.connect(db_path)
             self.logger.info(f"Connected to SQLite database: {db_path}")
 
         except Exception as e:
             self.logger.error(f"Connection error: {str(e)}")
             sys.exit(1)
+
+    def validate_db_path(self, db_path: str) -> bool:
+        """Validate the SQLite database path and schema"""
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"Database file not found: {db_path}")
+
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+
+            # Check for required tables
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('Person', 'Salary')")
+            tables = cursor.fetchall()
+            if len(tables) != 2:
+                raise ValueError("Database missing required tables")
+
+            return True
+        except sqlite3.Error as e:
+            raise ValueError(f"Invalid database file: {str(e)}")
+        finally:
+            if 'conn' in locals():
+                conn.close()
 
     def chunk_data(self, data: list[dict[str, Any]], size: int) -> Iterator[list[dict[str, Any]]]:
         """Split data into chunks for batch processing"""
@@ -127,18 +157,21 @@ class SalesforceLoader:
         success_count = 0
         error_count = 0
 
-        for batch in self.chunk_data(records, self.batch_size):
+        total_records = len(records)
+        for i, batch in enumerate(self.chunk_data(records, self.batch_size)):
+            processed = min((i + 1) * self.batch_size, total_records)
+            percentage = (processed / total_records) * 100
+            print(f"Processing batch {i+1}: {processed}/{total_records} records ({percentage:.1f}%)")
+
             try:
-                results = self.sf.bulk.Account.upsert(
-                    batch, 'External_Id__pc', batch_size=self.batch_size
-                )
+                results = self.sf.bulk.Account.insert(batch)
 
                 for result in results:
                     if result['success']:
                         success_count += 1
                     else:
                         error_count += 1
-                        self.logger.error(f"Error upserting person: {result}")
+                        self.logger.error(f"Error inserting person: {result}")
 
             except Exception as e:
                 self.logger.error(f"Batch error: {str(e)}")
@@ -204,6 +237,7 @@ def main():
 
     try:
         loader.load_persons()
+        print("\nAll person records have been loaded. Beginning salary records...")
         loader.load_salaries()
     except Exception as e:
         loader.logger.error(f"Fatal error: {str(e)}")
