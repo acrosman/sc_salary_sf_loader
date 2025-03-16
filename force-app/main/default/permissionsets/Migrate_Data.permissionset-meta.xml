@@ -4,6 +4,10 @@
     Salary History records.</description>
   <hasActivationRequired>false</hasActivationRequired>
   <label>Migrate Data</label>
+  <applicationVisibilities>
+    <application>SC_Salary_Data</application>
+    <visible>true</visible>
+  </applicationVisibilities>
   <objectPermissions>
     <allowCreate>true</allowCreate>
     <allowDelete>true</allowDelete>
@@ -13,6 +17,14 @@
     <object>Salary_History__c</object>
     <viewAllRecords>true</viewAllRecords>
   </objectPermissions>
+  <tabSettings>
+    <tab>Salary_History__c</tab>
+    <visibility>Visible</visibility>
+  </tabSettings>
+  <tabSettings>
+    <tab>standard-Account</tab>
+    <visibility>Visible</visibility>
+  </tabSettings>
   <fieldPermissions>
     <editable>true</editable>
     <field>Contact.External_Id__c</field>
