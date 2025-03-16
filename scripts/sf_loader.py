@@ -5,7 +5,6 @@ import logging
 from datetime import datetime
 import sys
 from typing import Any
-import json
 from collections.abc import Iterator
 import os
 
