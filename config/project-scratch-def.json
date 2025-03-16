@@ -14,9 +14,6 @@
     },
     "organizationSettings": {
       "enableCustomObjectTruncate": true
-    },
-    "storageSettings": {
-      "dataStorageMB": 51200
     }
   }
 }
