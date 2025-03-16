@@ -1,0 +1,2 @@
+# Core dependencies for SC Salary Data Loader
+simple-salesforce>=1.12.5  # Salesforce API interaction
