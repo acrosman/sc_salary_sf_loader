@@ -47,16 +47,16 @@ sf org login web --set-default-dev-hub
 
 ```bash
 # Create the scratch org
-sf org create scratch -f config/project-scratch-def.json -a sc_salary_loader
+sf org create scratch -f config/project-scratch-def.json -a sc_salary_loader --duration-days 7
 
 # Push the metadata
-sf project deploy start
+sf project deploy start --target-org sc_salary_loader
 
 # Assign permission set to the default user
-sf org assign permset --name Migrate_Data
+sf org assign permset --name Migrate_Data --target-org sc_salary_loader
 
 # Open the org
-sf org open
+sf org open --target-org sc_salary_loader
 ```
 
 ### 4. Running the Data Loader
