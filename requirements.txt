@@ -1,10 +1,7 @@
 # Core dependencies for SC Salary Data Loader
-simple-salesforce>=1.12.5  # Salesforce API interaction
+simple-salesforce>=1.12.9  # Salesforce API interaction
 
 # BigQuery + Salesforce OAuth2 loader (scripts/sf_loader_bq.py)
 google-cloud-bigquery>=3.27.0  # BigQuery client
 google-auth>=2.40.0            # Google authentication helpers
-PyJWT>=2.10.1                  # JWT signing for OAuth2 JWT Bearer flow
-cryptography>=46.0.5           # RSA key handling for JWT signing
 python-dotenv>=1.1.0           # Load .env credential files
-requests>=2.32.3               # HTTP requests for OAuth2 token exchange

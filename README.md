@@ -108,7 +108,13 @@ openssl rsa -in sf_private_key.pem -pubout -out sf_public_key.pem
    [SC Salary Data](https://github.com/acrosman/sc_salary_data) project.
 2. Create a **service account** with the `BigQuery Data Editor` and
    `BigQuery Job User` roles on the project.
-3. Download a **JSON key** for the service account.
+3. Download a **JSON key** for the service account.  Use
+   `bq_service_account.json.example` as a reference for the expected file
+   structure:
+```bash
+cp bq_service_account.json.example bq_service_account.json
+# Replace placeholder values with the real values from Google Cloud Console
+```
 
 #### 5d. Configure Environment Variables
 
@@ -129,7 +135,7 @@ The variables are:
 | `SALESFORCE_DOMAIN` | `login` (production) or `test` (sandbox) |
 | `BQ_PROJECT_ID` | Google Cloud project ID |
 | `BQ_DATASET_ID` | BigQuery dataset ID |
-| `BQ_CREDENTIALS_FILE` | Path to the service account JSON key file |
+| `BQ_CREDENTIALS_FILE` | Path to the service account JSON key file (see `bq_service_account.json.example`) |
 
 > **Security note:** The `.env` file, `*.pem` key files, and
 > `*_service_account.json` files are all listed in `.gitignore` and must
@@ -149,17 +155,18 @@ When prompted, optionally enter a maximum number of person records to load
 ## Project Structure
 
 ```
-├── config/                     # Salesforce project configuration
-├── force-app/                  # Salesforce metadata
+├── config/                          # Salesforce project configuration
+├── force-app/                       # Salesforce metadata
 │   └── main/default/
-│       └── objects/           # Custom object definitions
-│           └── fields/        # Custom field definitions
-├── scripts/                   # Python scripts
-│   ├── sf_loader.py           # SQLite + username/password loader
-│   └── sf_loader_bq.py        # BigQuery + OAuth2 JWT Bearer loader
-├── .env.example               # Template for credential environment variables
-├── requirements.txt           # Python dependencies
-└── README.md                  # This file
+│       └── objects/                # Custom object definitions
+│           └── fields/             # Custom field definitions
+├── scripts/                         # Python scripts
+│   ├── sf_loader.py                 # SQLite + username/password loader
+│   └── sf_loader_bq.py              # BigQuery + OAuth2 JWT Bearer loader
+├── .env.example                     # Template for credential environment variables
+├── bq_service_account.json.example  # Template for Google Cloud service account key
+├── requirements.txt                 # Python dependencies
+└── README.md                        # This file
 ```
 
 ## Error Handling

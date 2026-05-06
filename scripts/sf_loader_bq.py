@@ -11,18 +11,13 @@ See .env.example for the full list of required settings.
 import logging
 import os
 import sys
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 from collections.abc import Iterator
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
 from dotenv import load_dotenv
 from google.cloud import bigquery
 from google.oauth2 import service_account
-import jwt
-import requests
 from simple_salesforce import Salesforce
 
 # Load .env file if present (does nothing when vars are already set in the environment)
@@ -44,72 +39,6 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _load_private_key(path: str):
-    """Load an RSA private key from a PEM file."""
-    with open(path, "rb") as key_file:
-        private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend(),
-        )
-    return private_key
-
-
-# ---------------------------------------------------------------------------
-# Salesforce OAuth2 — JWT Bearer Token flow
-# ---------------------------------------------------------------------------
-
-def get_salesforce_token(
-    consumer_key: str,
-    private_key_path: str,
-    username: str,
-    domain: str = "login",
-) -> tuple[str, str]:
-    """Obtain a Salesforce access token via the OAuth2 JWT Bearer Token flow.
-
-    Args:
-        consumer_key: Connected App Consumer Key (client_id).
-        private_key_path: Path to the RSA private key PEM file.
-        username: Salesforce username to authenticate as.
-        domain: 'login' (production) or 'test' (sandbox).
-
-    Returns:
-        Tuple of (access_token, instance_url).
-    """
-    audience = f"https://{domain}.salesforce.com"
-    token_url = f"{audience}/services/oauth2/token"
-
-    now = int(time.time())
-    payload = {
-        "iss": consumer_key,
-        "sub": username,
-        "aud": audience,
-        "exp": now + 300,  # 5-minute expiry
-    }
-
-    private_key = _load_private_key(private_key_path)
-    # Export to PEM bytes for jwt.encode
-    pem_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.TraditionalOpenSSL,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-
-    assertion = jwt.encode(payload, pem_bytes, algorithm="RS256")
-
-    response = requests.post(
-        token_url,
-        data={
-            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "assertion": assertion,
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data["access_token"], data["instance_url"]
-
-
 # ---------------------------------------------------------------------------
 # Main loader class
 # ---------------------------------------------------------------------------
@@ -122,14 +51,14 @@ class SalesforceBigQueryLoader:
 
     Required environment variables
     --------------------------------
-    SALESFORCE_CONSUMER_KEY   – Connected App Consumer Key
-    SALESFORCE_PRIVATE_KEY_PATH – Path to RSA private key PEM file
-    SALESFORCE_USERNAME       – Salesforce username
-    SALESFORCE_DOMAIN         – 'login' (production) or 'test' (sandbox)
-    BQ_PROJECT_ID             – Google Cloud project that owns the dataset
-    BQ_DATASET_ID             – BigQuery dataset containing Person and Salary tables
-    BQ_CREDENTIALS_FILE       – Path to the service account JSON key file
-                                 (or set GOOGLE_APPLICATION_CREDENTIALS instead)
+    SALESFORCE_CONSUMER_KEY     – Connected App Consumer Key
+    SALESFORCE_PRIVATE_KEY_PATH – Path to the RSA private key PEM file
+    SALESFORCE_USERNAME         – Salesforce username
+    SALESFORCE_DOMAIN           – 'login' (production) or 'test' (sandbox)
+    BQ_PROJECT_ID               – Google Cloud project that owns the dataset
+    BQ_DATASET_ID               – BigQuery dataset containing Person and Salary tables
+    BQ_CREDENTIALS_FILE         – Path to the service account JSON key file
+                                   (or set GOOGLE_APPLICATION_CREDENTIALS instead)
 
     Example:
         loader = SalesforceBigQueryLoader()
@@ -198,7 +127,7 @@ class SalesforceBigQueryLoader:
             sys.exit(1)
 
     def _connect_salesforce(self):
-        """Authenticate with Salesforce using OAuth2 JWT Bearer flow."""
+        """Authenticate with Salesforce using the simple_salesforce OAuth2 JWT Bearer flow."""
         consumer_key = _require_env("SALESFORCE_CONSUMER_KEY")
         private_key_path = _require_env("SALESFORCE_PRIVATE_KEY_PATH")
         username = _require_env("SALESFORCE_USERNAME")
@@ -210,11 +139,12 @@ class SalesforceBigQueryLoader:
             )
 
         self.logger.info("Authenticating with Salesforce via OAuth2 JWT Bearer flow…")
-        access_token, instance_url = get_salesforce_token(
-            consumer_key, private_key_path, username, domain
+        self.sf = Salesforce(
+            username=username,
+            consumer_key=consumer_key,
+            privatekey_file=private_key_path,
+            domain=domain,
         )
-
-        self.sf = Salesforce(instance_url=instance_url, session_id=access_token)
         self.logger.info("Connected to Salesforce successfully")
 
         # Resolve Person Account Record Type ID
