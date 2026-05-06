@@ -29,7 +29,6 @@ MANIFEST
 .sf-config.json
 
 # Virtual Environment
-.env
 .venv
 env/
 venv/
@@ -48,6 +47,12 @@ venv.bak/
 # Project Specific
 sf_loader_*.log
 *.log
+
+# Credential and key files — must never be committed
+.env
+*.pem
+*_service_account.json
+bq_credentials.json
 
 # IDE and Editor Files
 .vscode/

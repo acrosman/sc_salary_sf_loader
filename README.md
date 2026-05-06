@@ -16,8 +16,9 @@ This application:
 - Python 3.11 or higher
 - Salesforce CLI
 - Visual Studio Code with Salesforce Extension Pack
-- SQLite database from [SC Salary Data](https://github.com/acrosman/sc_salary_data)
 - Salesforce Developer Account with DevHub enabled
+- **For `sf_loader.py`:** SQLite database from [SC Salary Data](https://github.com/acrosman/sc_salary_data)
+- **For `sf_loader_bq.py`:** Google Cloud project with BigQuery dataset and a service account
 
 ## Setup Instructions
 
@@ -59,7 +60,7 @@ sf org assign permset --name Migrate_Data --target-org sc_salary_loader
 sf org open --target-org sc_salary_loader
 ```
 
-### 4. Running the Data Loader
+### 4. Running the SQLite Loader (`sf_loader.py`)
 
 1. Ensure you have the SQLite database from the SC Salary Data project
 2. Run the loader script:
@@ -72,18 +73,100 @@ python scripts/sf_loader.py
    - Provide your Salesforce credentials
    - Select the appropriate domain (test/login)
 
+---
+
+### 5. Running the BigQuery + OAuth2 Loader (`sf_loader_bq.py`)
+
+This loader reads data from a Google BigQuery dataset and authenticates with
+Salesforce using the **OAuth2 JWT Bearer Token** flow — no username/password
+prompts at runtime.
+
+#### 5a. Salesforce Connected App Setup
+
+1. In Salesforce Setup, navigate to **App Manager → New Connected App**.
+2. Enable **OAuth Settings** and add the scope `api` (or `full`).
+3. Enable **Use digital signatures** and upload your RSA public key (see below).
+4. Save the app and copy the **Consumer Key**.
+5. In **Manage Connected Apps**, set the app's OAuth policies to
+   *Admin approved users are pre-authorised* and add the relevant profiles or
+   permission sets.
+
+#### 5b. Generate an RSA Key Pair
+
+```bash
+# Generate a 2048-bit private key (keep this file secret!)
+openssl genrsa -out sf_private_key.pem 2048
+
+# Export the matching public key to upload to the Connected App
+openssl rsa -in sf_private_key.pem -pubout -out sf_public_key.pem
+```
+
+#### 5c. Google Cloud Setup
+
+1. Create (or identify) a **BigQuery dataset** that contains `Person` and
+   `Salary` tables matching the schema from the
+   [SC Salary Data](https://github.com/acrosman/sc_salary_data) project.
+2. Create a **service account** with the `BigQuery Data Editor` and
+   `BigQuery Job User` roles on the project.
+3. Download a **JSON key** for the service account.  Use
+   `bq_service_account.json.example` as a reference for the expected file
+   structure:
+```bash
+cp bq_service_account.json.example bq_service_account.json
+# Replace placeholder values with the real values from Google Cloud Console
+```
+
+#### 5d. Configure Environment Variables
+
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+The variables are:
+
+| Variable | Description |
+|---|---|
+| `SALESFORCE_CONSUMER_KEY` | Connected App Consumer Key |
+| `SALESFORCE_PRIVATE_KEY_PATH` | Path to `sf_private_key.pem` |
+| `SALESFORCE_USERNAME` | Salesforce username (pre-authorised for the app) |
+| `SALESFORCE_DOMAIN` | `login` (production) or `test` (sandbox) |
+| `BQ_PROJECT_ID` | Google Cloud project ID |
+| `BQ_DATASET_ID` | BigQuery dataset ID |
+| `BQ_CREDENTIALS_FILE` | Path to the service account JSON key file (see `bq_service_account.json.example`) |
+
+> **Security note:** The `.env` file, `*.pem` key files, and
+> `*_service_account.json` files are all listed in `.gitignore` and must
+> **never** be committed to source control.
+
+#### 5e. Run the BigQuery Loader
+
+```bash
+python scripts/sf_loader_bq.py
+```
+
+When prompted, optionally enter a maximum number of person records to load
+(press **Enter** to load all records).
+
+---
+
 ## Project Structure
 
 ```
-├── config/                     # Salesforce project configuration
-├── force-app/                  # Salesforce metadata
+├── config/                          # Salesforce project configuration
+├── force-app/                       # Salesforce metadata
 │   └── main/default/
-│       └── objects/           # Custom object definitions
-│           └── fields/        # Custom field definitions
-├── scripts/                   # Python scripts
-│   └── sf_loader.py          # Main data loading script
-├── requirements.txt           # Python dependencies
-└── README.md                 # This file
+│       └── objects/                # Custom object definitions
+│           └── fields/             # Custom field definitions
+├── scripts/                         # Python scripts
+│   ├── sf_loader.py                 # SQLite + username/password loader
+│   └── sf_loader_bq.py              # BigQuery + OAuth2 JWT Bearer loader
+├── .env.example                     # Template for credential environment variables
+├── bq_service_account.json.example  # Template for Google Cloud service account key
+├── requirements.txt                 # Python dependencies
+└── README.md                        # This file
 ```
 
 ## Error Handling
